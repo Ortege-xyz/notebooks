@@ -99,8 +99,9 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=${{ secrets.CR_ENDPOINT }}/ortege/notebooks-server:buildcache
-          cache-to: type=registry,ref=${{ secrets.CR_ENDPOINT }}/ortege/notebooks-server:buildcache,mode=max
+          # # NOTE(joseb): we cannot use cache without buildx
+          # cache-from: type=registry,ref=${{ secrets.CR_ENDPOINT }}/ortege/notebooks-server:buildcache
+          # cache-to: type=registry,ref=${{ secrets.CR_ENDPOINT }}/ortege/notebooks-server:buildcache,mode=max
 
 
   interpreter:
@@ -156,5 +157,6 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=${{ secrets.CR_ENDPOINT }}/ortege/notebooks-interpreter:buildcache
-          cache-to: type=registry,ref=${{ secrets.CR_ENDPOINT }}/ortege/notebooks-interpreter:buildcache,mode=max
+          # # NOTE(joseb): we cannot use cache without buildx
+          # cache-from: type=registry,ref=${{ secrets.CR_ENDPOINT }}/ortege/notebooks-interpreter:buildcache
+          # cache-to: type=registry,ref=${{ secrets.CR_ENDPOINT }}/ortege/notebooks-interpreter:buildcache,mode=max
