@@ -11,9 +11,33 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-push:
+  distribution:
     if: "! contains(toJSON(github.event.commits.*.message), '[skip-action]')"
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Build distribution image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          tags: zeppelin-distribution:latest
+          outputs: type=docker,dest=/tmp/distribution.tar
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: myimage
+          path: /tmp/distribution.tar
+          retention-days: 1
+
+  server:
+    if: "! contains(toJSON(github.event.commits.*.message), '[skip-action]')"
+    runs-on: ubuntu-latest
+    needs: distribution
     steps:
       - uses: actions/checkout@v3
 
@@ -23,27 +47,12 @@ jobs:
           echo "TAG_DATE=$(date +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
           echo "TAG_SHA=$(echo '${{ github.sha }}' | cut -b 1-7)" >> $GITHUB_OUTPUT
 
-      - name: Generate image tag for server
-        id: meta-server
+      - name: Generate image tag
+        id: meta
         uses: docker/metadata-action@v5
         with:
-          # list of Docker images to use as base name for tags
           images: |
             ${{ secrets.CR_ENDPOINT }}/ortege/notebooks-server
-          # generate Docker tags based on the following events/attributes
-          tags: |
-            type=ref,event=branch
-            type=ref,event=tag
-            type=raw,value=${{ steps.taggen.outputs.TAG_SHA }}-${{ steps.taggen.outputs.TAG_DATE }}
-
-      - name: Generate image tag for interpreter
-        id: meta-interpreter
-        uses: docker/metadata-action@v5
-        with:
-          # list of Docker images to use as base name for tags
-          images: |
-            ${{ secrets.CR_ENDPOINT }}/ortege/notebooks-interpreter
-          # generate Docker tags based on the following events/attributes
           tags: |
             type=ref,event=branch
             type=ref,event=tag
@@ -59,25 +68,73 @@ jobs:
           username: ${{ secrets.CR_USERNAME }}
           password: ${{ secrets.CR_PASSWORD }}
 
-      - name: Build distribution image
-        uses: docker/build-push-action@v5
+      - name: Download artifact
+        uses: actions/download-artifact@v3
         with:
-          context: .
-          push: false
-          tags: zeppelin-distribution:latest
+          name: distribution
+          path: /tmp
 
-      - name: Build and push interpreter image
+      - name: Load distribution image
+        run: |
+          docker load --input /tmp/distribution.tar
+          docker image ls -a
+
+      - name: Build and push
         uses: docker/build-push-action@v5
         with:
           context: scripts/docker/zeppelin-server/
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta-interpreter.outputs.tags }}
-          labels: ${{ steps.meta-interpreter.outputs.labels }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
 
-      - name: Build and push server image
+  interpreter:
+    if: "! contains(toJSON(github.event.commits.*.message), '[skip-action]')"
+    runs-on: ubuntu-latest
+    needs: distribution
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Generate tag data
+        id: taggen
+        run: |
+          echo "TAG_DATE=$(date +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
+          echo "TAG_SHA=$(echo '${{ github.sha }}' | cut -b 1-7)" >> $GITHUB_OUTPUT
+
+      - name: Generate image tag
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ secrets.CR_ENDPOINT }}/ortege/notebooks-interpreter
+          tags: |
+            type=ref,event=branch
+            type=ref,event=tag
+            type=raw,value=${{ steps.taggen.outputs.TAG_SHA }}-${{ steps.taggen.outputs.TAG_DATE }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Log into registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ secrets.CR_ENDPOINT }}
+          username: ${{ secrets.CR_USERNAME }}
+          password: ${{ secrets.CR_PASSWORD }}
+
+      - name: Download artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: distribution
+          path: /tmp
+      - name: Load distribution image
+        run: |
+          docker load --input /tmp/distribution.tar
+          docker image ls -a
+
+      - name: Build and push image
         uses: docker/build-push-action@v5
         with:
           context: scripts/docker/zeppelin-interpreter/
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta-server.outputs.tags }}
-          labels: ${{ steps.meta-server.outputs.labels }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
