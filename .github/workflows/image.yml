@@ -33,13 +33,15 @@ jobs:
           context: .
           tags: zeppelin-distribution:latest
           outputs: type=docker,dest=/tmp/distribution.tar
-          cache-from: type=registry,ref=${{ secrets.CR_ENDPOINT }}/ortege/notebooks-distribution:buildcache
+          cache-from: |
+            type=registry,ref=${{ secrets.CR_ENDPOINT }}/ortege/notebooks-distribution:buildcache
+            type=registry,ref=${{ secrets.CR_ENDPOINT }}/ortege/notebooks:ortege
           cache-to: type=registry,ref=${{ secrets.CR_ENDPOINT }}/ortege/notebooks-distribution:buildcache,mode=max
 
       - name: Upload artifact
         uses: actions/upload-artifact@v3
         with:
-          name: myimage
+          name: distribution
           path: /tmp/distribution.tar
           retention-days: 1
 
