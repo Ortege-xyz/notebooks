@@ -23,13 +23,26 @@ jobs:
           echo "TAG_DATE=$(date +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
           echo "TAG_SHA=$(echo '${{ github.sha }}' | cut -b 1-7)" >> $GITHUB_OUTPUT
 
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@v4
+      - name: Generate image tag for server
+        id: meta-server
+        uses: docker/metadata-action@v5
         with:
           # list of Docker images to use as base name for tags
           images: |
-            ${{ secrets.CR_ENDPOINT }}/ortege/notebooks
+            ${{ secrets.CR_ENDPOINT }}/ortege/notebooks-server
+          # generate Docker tags based on the following events/attributes
+          tags: |
+            type=ref,event=branch
+            type=ref,event=tag
+            type=raw,value=${{ steps.taggen.outputs.TAG_SHA }}-${{ steps.taggen.outputs.TAG_DATE }}
+
+      - name: Generate image tag for interpreter
+        id: meta-interpreter
+        uses: docker/metadata-action@v5
+        with:
+          # list of Docker images to use as base name for tags
+          images: |
+            ${{ secrets.CR_ENDPOINT }}/ortege/notebooks-interpreter
           # generate Docker tags based on the following events/attributes
           tags: |
             type=ref,event=branch
@@ -46,10 +59,25 @@ jobs:
           username: ${{ secrets.CR_USERNAME }}
           password: ${{ secrets.CR_PASSWORD }}
 
-      - name: Build and push
+      - name: Build distribution image
         uses: docker/build-push-action@v5
         with:
-          context: scripts/docker/zeppelin/bin/
+          context: .
+          push: false
+          tags: zeppelin-distribution:latest
+
+      - name: Build and push interpreter image
+        uses: docker/build-push-action@v5
+        with:
+          context: scripts/docker/zeppelin-server/
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.meta-interpreter.outputs.tags }}
+          labels: ${{ steps.meta-interpreter.outputs.labels }}
+
+      - name: Build and push server image
+        uses: docker/build-push-action@v5
+        with:
+          context: scripts/docker/zeppelin-interpreter/
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-server.outputs.tags }}
+          labels: ${{ steps.meta-server.outputs.labels }}
